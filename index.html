@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Chatroom with Gemini API</title>
+    <style>
+        body {
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #000;
+            /* Default background in case image doesn't load */
+        }
+
+        #backgroundWrapper {
+            width: 80vw;
+            /* Use viewport width units */
+            max-width: 800px;
+            /* Maximum width remains 800px */
+            height: 80vw;
+            /* Height is set to be the same in viewport width units, approximating the width */
+            max-height: 800px;
+            /* Maximum height to match the maximum width */
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            background-image: url('./img/shadow.gif');
+            /* Replace with your image path */
+            background-size: contain;
+            /* Ensures the image is fully visible without stretching */
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        #gameContainer {
+            width: 100%;
+            /* Takes the full width of the background wrapper */
+            height: 200px;
+            /* Adjusted height to position at the bottom of the image */
+            background: rgba(0, 0, 0, 0.8);
+            /* Semi-transparent black background */
+            padding: 10px;
+            display: none;
+            box-sizing: border-box;
+            border: 1px solid #fff;
+            overflow: hidden;
+        }
+
+        #messages {
+            height: 80%;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+
+        .message {
+            margin: 5px 0;
+        }
+
+        .userMessage {
+            color: red;
+        }
+
+        .botMessage {
+            color: white;
+        }
+
+        #messageInput {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            background: transparent;
+            border: none;
+            border-top: 1px solid #fff;
+            color: white;
+            font-size: 16px;
+        }
+
+        #startButton, #introButton {
+            padding: 15px 30px;
+            /* Increase padding for a better look */
+            font-size: 20px;
+            /* Adjust font size */
+            cursor: pointer;
+            /* Position it within the wrapper */
+            margin-bottom: 20px;
+            color: white;
+            /* Text color */
+            background: rgba(0, 0, 0, 0.8);
+            /* Same semi-transparent background as introBlock */
+            border: 1px solid #fff;
+            /* Same border as introBlock */
+            border-radius: 5px;
+            /* Rounded corners similar to introBlock */
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+            /* Subtle shadow for depth */
+            transition: all 0.3s ease;
+            /* Smooth transition for hover effects */
+        }
+
+        #startButton:hover,
+        #introButton:hover {
+            background: rgba(0, 0, 0, 1);
+            /* Darker background on hover */
+            box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.5);
+            /* Slightly larger shadow on hover */
+            transform: scale(1.05);
+            /* Slightly enlarge on hover */
+        }
+
+        #introBlock {
+            width: 80%;
+            max-width: 600px;
+            background: rgba(0, 0, 0, 0.8);
+            /* Semi-transparent background */
+            padding: 20px;
+            box-sizing: border-box;
+            border: 1px solid #fff;
+            margin-bottom: 20px;
+            /* Space between intro block and start button */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+            /* Initially hidden */
+        }
+    </style>
+</head>
+
+<body>
+    <div id="introBlock">
+       
+        <h1>前情提要</h1>
+        <p>你是席德，是個平凡的島上居民。你醒來發現你在一個神祕的小木屋裡，旁邊站著一個陌生女子。</p>
+        <button id="startButton">Link Start</button>
+    </div>
+    <div id="backgroundWrapper">
+        <button id="introButton">進擊的影之強者</button>
+        <div id="gameContainer">
+            <div id="messages"></div>
+            <form id="messageForm">
+                <input type="text" id="messageInput" placeholder="Type your command...">
+            </form>
+        </div>
+    </div>
+
+</body>
+<script>
+    var conversationHistory = [];
+
+    var apiKey = prompt("Please enter your API key:", "");
+    //var userName = prompt("Please enter your name:", "");
+
+    if (!apiKey) {
+        alert("API key is required to use the chatroom.");
+        // Optionally, redirect or disable form
+    } else {
+        document.getElementById('messageForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+            var inputElement = document.getElementById('messageInput');
+            var message = inputElement.value;
+
+            addToConversationHistory('user', message);
+            displayMessage(message, 'user');
+            inputElement.disabled = true;
+            fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + apiKey, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    "contents": conversationHistory,
+                    "safetySettings": [
+                        {
+                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                            "threshold": "BLOCK_NONE"
+                        },
+                        {
+                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "threshold": "BLOCK_NONE"
+                        },
+                    ],
+                    "generationConfig": {
+                        "stopSequences": [
+                            ""
+                        ],
+                        "temperature": 2.0,
+                        "maxOutputTokens": 2048,
+                        "topP": 0.8,
+                        "topK": 10
+                    }
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    var responseText = data.candidates[0].content.parts[0].text;
+                    addToConversationHistory('model', responseText);
+                    displayMessage(responseText, 'bot');
+                    inputElement.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error)
+                    inputElement.disabled = false;
+                });
+
+            document.getElementById('messageInput').value = '';
+        });
+    }
+
+    function addToConversationHistory(role, text) {
+        conversationHistory.push({
+            "role": role,
+            "parts": [{
+                "text": text
+            }]
+        });
+    }
+
+    function displayMessage(message, sender) {
+        var messageElement = document.createElement('div');
+        var formatMessage = formatText(message);
+        messageElement.classList.add('message');
+        if (sender === 'user') {
+            messageElement.classList.add('userMessage');
+        } else {
+            messageElement.classList.add('botMessage');
+        }
+        document.getElementById('messages').appendChild(messageElement);
+        updateSceneImage(message);
+        // Function to display the text one character at a time
+        function typeText(element, text, index) {
+            if (index < text.length) {
+                let char = text[index];
+                if (char === '<') {
+                    let endIndex = text.indexOf('>', index);
+                    if (endIndex !== -1) {
+                        element.innerHTML += text.substring(index, endIndex + 1);
+                        index = endIndex + 1;
+                    }
+                } else {
+                    element.innerHTML += char;
+                    index++;
+                }
+                setTimeout(function () {
+                    typeText(element, text, index);
+                }, 75); // Adjust typing speed by changing the delay (in milliseconds)
+            } else {
+                // Scroll to bottom after the entire message is displayed
+                document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+            }
+        }
+
+        // Start typing the formatted message
+        typeText(messageElement, formatMessage, 0);
+    }
+
+    function updateSceneImage(responseText) {
+        let sceneMatch = responseText.match(/場景：(.*?)\s/); // 使用正則表達式匹配場景描述
+        if (sceneMatch && sceneMatch[1]) {
+            let scene = sceneMatch[1];
+            console.log(scene);
+            // 檢查scene是否包含"宿舍"
+            if (scene.includes("小屋內")) {
+                document.getElementById('backgroundWrapper').style.backgroundImage = "url('./img/cabin.jpg')";
+            } else if (scene.includes("秘密基地")) {
+                document.getElementById('backgroundWrapper').style.backgroundImage = "url('./img/sb.jpg')";
+            } else if (scene.includes("海岸")) {
+                document.getElementById('backgroundWrapper').style.backgroundImage = "url('./img/beach.jpg')";
+            }
+        }
+    }
+
+    function formatText(text) {
+        // Replace ** with a new line and bold tag
+        let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<br><strong>$1</strong>');
+
+        // Replace * with a new line and bullet point
+        formattedText = formattedText.replace(/\*(.*?)\s/g, '<br>$1');
+
+        return formattedText;
+    }
+
+    document.getElementById('introButton').addEventListener('click', function () {
+        document.getElementById('introBlock').style.display = 'block';
+        this.style.display = 'none'; // Hide the intro button
+        document.getElementById('startButton').style.display = 'block'; // Show the start button
+    });
+
+    document.getElementById('startButton').addEventListener('click', function () {
+        // Change background image and display settings when starting the game
+        document.getElementById('backgroundWrapper').style.backgroundImage = "url('./img/cabin.jpeg')";
+        document.getElementById('introBlock').style.display = 'none'; // Show the game container
+        document.getElementById('gameContainer').style.display = 'inline';
+        document.getElementById('introButton').style.display = 'none'; // Hide the start button
+
+        conversationHistory.push({
+        
+            "role": 'user',
+            "parts": [{
+                "text": `腳本：
+
+                請根據腳本中的對話，開始一個文字冒險遊戲，按照()內的順序變換場景，不要自主改變。
+                選擇的內文也不要改變，照著我的文案輸出就好。
+                不要幫忙選擇，等待使用者選擇。
+                遊戲背景  
+                席德在一次意外中獲得了強大的力量，而這力量可能是抵禦大陸居民入侵的唯一希望。遊戲通過席德的選擇來探索力量的來源和使用方法，以及如何面對即將來臨的災難。
+                ()內文字打出來
+                每一個不同的對話都要換行
+                
+                主要角色：
+                席德：主角，意外獲得影之強者力量的年輕人。
+                瀧奈：席德的朋友，擁有強烈正義感。
+                遊戲腳本流程：
+                序章
+                （場景：小屋內）
+                (注意到旁邊的陌生女子)
+                選擇A：妳是誰？
+                選擇B：默不吭聲，裝沒事看天花板。
+                
+                若選擇A：
+                瀧奈：我是瀧奈，你終於醒了。你知道你差點就死了嗎？
+                席德：我好像……發生了意外，但現在感覺自己有了某種力量。
+                瀧奈：我從大陸回來。我知道這力量的來源，也知道它的危險。大陸居民計劃襲擊這座島嶼，而你的力量可能是唯一能夠改變這一切的關鍵。(選擇後進入第一章)
+
+                若選擇B：
+                (五分鐘後瀧奈注意到你)
+                瀧奈：我是瀧奈，你終於醒了。你知道你差點就死了嗎？
+                席德：我好像……發生了意外，但現在感覺自己有了某種力量。
+                瀧奈：我從大陸回來。我知道這力量的來源，也知道它的危險。大陸居民計劃襲擊這座島嶼，而你的力量可能是唯一能夠改變這一切的關鍵。(選擇後進入第一章)
+                
+
+                第一章
+                （場景：秘密基地）
+                (一邊吃瀧奈做的點心一邊討論)
+                選擇A：詢問力量的來源。
+                選擇B：詢問大陸的計劃。
+
+                若選擇A：
+                席德：這力量到底是什麼？它從哪裡來的？
+                瀧奈：這力量來自古老的傳說，被稱為影之強者的力量。相當於無數隻的超大型巨人，但它的代價往往是毀滅性的。(選擇後進入第二章)
+
+                若選擇B：
+                席德：大陸居民到底計劃做什麼？
+                瀧奈：計畫召喚超大型巨人，把整座島踏平。(選擇後進入第二章)
+
+                第二章
+                （場景：海岸）
+
+                選擇A：發動影之強者的力量，對抗來襲的軍隊。
+                選擇B：落荒而逃
+                若選擇A：
+                席德：I AM ATOMIC.，(接著幫我生成一段席德如何使用影之強者的力量大殺特殺，大約五十字)(選擇後進入結局)
+                
+                若選擇B，把以下文本完整打出來：
+                瀧奈：各位觀眾，今天我家席德又輸了！他打贏的機率是零，ZERO！比我跟艾瑪華森結婚機率還低!(選擇後進入結局)
+
+                結局：
+
+                發動影之強者的力量，對抗來襲的軍隊。
+                瀧奈：說出對席德的稱讚，並表達愛意，展示強烈的熱情(大約一百字)
+
+               
+
+
+                請根據腳本中的對話，根據"""序章"""到"""第一章"""到"""第二章"""最後到"""結局"""進行，開始一個文字冒險遊戲，每一次的對話，都需要呈現以下格式與資訊：
+                <場景>：目前故事的背景為何
+                <選擇>：在每一次的對話中，你都會根據腳本給我可以選擇的動作，根據我選擇的動作繼續接下來的劇情，整體劇情會圍繞腳本發展。
+
+                根據我的選擇進行故事就好，不要幫我做出選擇`
+            }]
+        })
+        fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + apiKey, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                "contents": conversationHistory,
+                "safetySettings": [
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "threshold": "BLOCK_NONE"
+                    },
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "threshold": "BLOCK_NONE"
+                    },
+                ],
+                "generationConfig": {
+                    "stopSequences": [
+                        ""
+                    ],
+                    "temperature": 2.0,
+                    "maxOutputTokens": 2048,
+                    "topP": 0.8,
+                    "topK": 10
+                }
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log(conversationHistory);
+                var responseText = data.candidates[0].content.parts[0].text;
+                addToConversationHistory('model', responseText);
+                displayMessage(responseText, 'bot');
+            })
+            .catch(error => console.error('Error:', error));
+    });
+
+
+
+</script>
+
+</html>
